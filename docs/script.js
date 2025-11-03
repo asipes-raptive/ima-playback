@@ -2,12 +2,12 @@ const adContainer = document.getElementById('ad-container');
 const contentVideo = document.getElementById('content');
 const logEntries = document.getElementById('log-entries');
 const adTagUrls = [
-  { adTagUrl: 'https://vast-tags.com/tag/15_etsy', isVpaid: false },
-  { adTagUrl: 'https://vast-tags.com/tag/15_garden_of_life', isVpaid: false },
-  { adTagUrl: 'https://vast-tags.com/tag/15_squarespace', isVpaid: false },
   { adTagUrl: 'https://vast-tags.com/tag/15_honda', isVpaid: true },
   { adTagUrl: 'https://vast-tags.com/tag/15_west_elm', isVpaid: true },
   { adTagUrl: 'https://vast-tags.com/tag/15_hulu', isVpaid: true },
+  { adTagUrl: 'https://vast-tags.com/tag/15_etsy', isVpaid: false },
+  { adTagUrl: 'https://vast-tags.com/tag/15_garden_of_life', isVpaid: false },
+  { adTagUrl: 'https://vast-tags.com/tag/15_squarespace', isVpaid: false },
 ];
 
 function logAd(adUrl, isVpaid) {
