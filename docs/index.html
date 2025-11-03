@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IMA3 VPAID Autoplay</title>
+    <script src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="player">
+      <div id="ad-container"></div>
+      <video id="content" playsinline muted></video>
+    </div>
+    <div id="button-container">
+      <button id="play-pause-button">⏸</button>
+      <button id="mute-button">🔇</button>
+      <button id="skip-button">⏭</button>
+    </div>
+    <div id="filter-container">
+      <select id="vpaid-filter">
+        <option value="both">Both VPAID and Non-VPAID</option>
+        <option value="vpaid">VPAID Only</option>
+        <option value="nonvpaid">Non-VPAID Only</option>
+      </select>
+    </div>
+    <div id="log-container">
+      <div class="log-header">Ad Log</div>
+      <div id="log-entries"></div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
