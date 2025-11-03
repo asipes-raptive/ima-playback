@@ -45,6 +45,12 @@ let adsManager = null;
 let vpaidFilter = 'both'; // 'both', 'vpaid', or 'nonvpaid'
 let isPaused = false;
 let isMuted = true; // Start muted
+let startTimeout = null;
+let completionTimeout = null;
+let progressMonitorInterval = null;
+let lastProgressTime = null;
+let adStarted = false;
+let adCompleted = false;
 
 const adDisplayContainer = new google.ima.AdDisplayContainer(adContainer, contentVideo);
 const adsLoader = new google.ima.AdsLoader(adDisplayContainer);
@@ -75,8 +81,55 @@ function findNextMatchingAd(startIndex) {
   return -1;
 }
 
+function clearAllTimeouts() {
+  if (startTimeout) {
+    clearTimeout(startTimeout);
+    startTimeout = null;
+  }
+  if (completionTimeout) {
+    clearTimeout(completionTimeout);
+    completionTimeout = null;
+  }
+  if (progressMonitorInterval) {
+    clearInterval(progressMonitorInterval);
+    progressMonitorInterval = null;
+  }
+  lastProgressTime = null;
+  adStarted = false;
+  adCompleted = false;
+}
+
+function handleAdTimeout(reason) {
+  if (adCompleted) return; // Already handled
+
+  console.warn(`Ad timeout: ${reason}`);
+  const currentAd = adTagUrls[currentAdIndex];
+  logAdFailure(currentAd.adTagUrl, currentAd.isVpaid, 'TIMEOUT', `Ad ${reason} - automatically moving to next ad`);
+
+  clearAllTimeouts();
+  moveToNextAd();
+}
+
+function moveToNextAd() {
+  if (adsManager) {
+    try {
+      adsManager.destroy();
+    } catch (e) {
+      console.error('Error destroying ads manager:', e);
+    }
+    adsManager = null;
+  }
+  clearAllTimeouts();
+  // Move to next ad index first, then find next matching one
+  currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
+  playNextAd();
+}
+
 function playNextAd() {
   if (adTagUrls.length === 0) return;
+
+  // Clear any existing timeouts
+  clearAllTimeouts();
 
   // Find next ad that matches the filter
   const nextMatchingIndex = findNextMatchingAd(currentAdIndex);
@@ -88,6 +141,12 @@ function playNextAd() {
   currentAdIndex = nextMatchingIndex;
   const currentAd = adTagUrls[currentAdIndex];
   logAd(currentAd.adTagUrl, currentAd.isVpaid);
+
+  // Set a timeout for ads that never load (longer for VPAID)
+  const loadTimeout = currentAd.isVpaid ? 15000 : 10000; // 15s for VPAID, 10s for non-VPAID
+  startTimeout = setTimeout(() => {
+    handleAdTimeout('failed to load');
+  }, loadTimeout);
 
   const req = new google.ima.AdsRequest();
   req.adTagUrl = currentAd.adTagUrl;
@@ -107,17 +166,7 @@ function checkAndSkipCurrentAdIfNeeded() {
 }
 
 function skipToNextAd() {
-  if (adsManager) {
-    try {
-      adsManager.destroy();
-    } catch (e) {
-      console.error('Error destroying ads manager:', e);
-    }
-    adsManager = null;
-  }
-  // Move to next ad index first, then find next matching one
-  currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
-  playNextAd();
+  moveToNextAd();
 }
 
 const skipButton = document.getElementById('skip-button');
@@ -169,6 +218,12 @@ vpaidFilterSelect.addEventListener('change', (e) => {
 });
 
 adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
+  // Clear the load timeout since ad loaded
+  if (startTimeout) {
+    clearTimeout(startTimeout);
+    startTimeout = null;
+  }
+
   adsManager = e.getAdsManager(contentVideo);
   adsManager.init(adContainer.clientWidth, adContainer.clientHeight, google.ima.ViewMode.NORMAL);
   adsManager.setVolume(isMuted ? 0 : 1); // respect mute state
@@ -177,12 +232,88 @@ adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOA
   isPaused = false;
   playPauseButton.textContent = '⏸';
 
-  adsManager.addEventListener(google.ima.AdEvent.Type.COMPLETE, () => {
-    currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
-    playNextAd();
+  const currentAd = adTagUrls[currentAdIndex];
+
+  // Set timeout for ads that never start (longer for VPAID)
+  const startTimeoutDuration = currentAd.isVpaid ? 10000 : 8000; // 10s for VPAID, 8s for non-VPAID
+  startTimeout = setTimeout(() => {
+    if (!adStarted) {
+      handleAdTimeout('failed to start');
+    }
+  }, startTimeoutDuration);
+
+  // Set timeout for ads that never complete (with reasonable max duration)
+  const maxAdDuration = 60000; // 60 seconds max
+  completionTimeout = setTimeout(() => {
+    if (!adCompleted) {
+      handleAdTimeout('exceeded maximum duration');
+    }
+  }, maxAdDuration);
+
+  // Track progress to detect stuck ads
+  lastProgressTime = Date.now();
+  progressMonitorInterval = setInterval(() => {
+    const now = Date.now();
+    // If ad started but hasn't made progress in 15 seconds, consider it stuck
+    if (adStarted && !adCompleted && now - lastProgressTime > 15000) {
+      handleAdTimeout('appears to be stuck');
+    }
+  }, 5000); // Check every 5 seconds
+
+  // Listen for LOADED event
+  adsManager.addEventListener(google.ima.AdEvent.Type.LOADED, () => {
+    console.log('Ad loaded');
   });
 
+  // Listen for STARTED event - critical for VPAID ads
+  adsManager.addEventListener(google.ima.AdEvent.Type.STARTED, () => {
+    console.log('Ad started');
+    adStarted = true;
+    if (startTimeout) {
+      clearTimeout(startTimeout);
+      startTimeout = null;
+    }
+    lastProgressTime = Date.now();
+  });
+
+  // Listen for PROGRESS events to track that ad is making progress
+  adsManager.addEventListener(google.ima.AdEvent.Type.PROGRESS, () => {
+    lastProgressTime = Date.now();
+  });
+
+  // Listen for FIRST_QUARTILE, MIDPOINT, THIRD_QUARTILE as progress indicators
+  adsManager.addEventListener(google.ima.AdEvent.Type.FIRST_QUARTILE, () => {
+    lastProgressTime = Date.now();
+  });
+  adsManager.addEventListener(google.ima.AdEvent.Type.MIDPOINT, () => {
+    lastProgressTime = Date.now();
+  });
+  adsManager.addEventListener(google.ima.AdEvent.Type.THIRD_QUARTILE, () => {
+    lastProgressTime = Date.now();
+  });
+
+  // Listen for COMPLETE event
+  adsManager.addEventListener(google.ima.AdEvent.Type.COMPLETE, () => {
+    if (adCompleted) return; // Already handled
+
+    console.log('Ad completed');
+    adCompleted = true;
+    clearAllTimeouts();
+    moveToNextAd();
+  });
+
+  // Listen for SKIPPED event (some ads can be skipped)
+  adsManager.addEventListener(google.ima.AdEvent.Type.SKIPPED, () => {
+    console.log('Ad skipped');
+    adCompleted = true;
+    clearAllTimeouts();
+    moveToNextAd();
+  });
+
+  // Listen for ERROR event
   adsManager.addEventListener(google.ima.AdEvent.Type.ERROR, (e) => {
+    if (adCompleted) return; // Already handled
+
     const currentAd = adTagUrls[currentAdIndex];
     let errorCode = 'Unknown';
     let errorMessage = 'No error message available';
@@ -205,14 +336,23 @@ adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOA
     }
 
     logAdFailure(currentAd.adTagUrl, currentAd.isVpaid, errorCode, errorMessage);
-    currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
-    playNextAd();
+    adCompleted = true;
+    clearAllTimeouts();
+    moveToNextAd();
   });
 
-  adsManager.start();
+  // Start the ad
+  try {
+    adsManager.start();
+  } catch (error) {
+    console.error('Error starting ad:', error);
+    handleAdTimeout('failed to start (exception)');
+  }
 });
 
 adsLoader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
+  if (adCompleted) return; // Already handled
+
   const error = e.getError();
   const currentAd = adTagUrls[currentAdIndex];
   const errorCode = error.getErrorCode ? error.getErrorCode() : 'Unknown';
@@ -220,8 +360,9 @@ adsLoader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
 
   logAdFailure(currentAd.adTagUrl, currentAd.isVpaid, errorCode, errorMessage);
   console.error(error);
-  currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
-  playNextAd();
+  adCompleted = true;
+  clearAllTimeouts();
+  moveToNextAd();
 });
 
 // Initialize and request first ad
