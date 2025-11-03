@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>IMA3 VPAID Autoplay</title>
+    <script src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        display: grid;
+        place-items: center;
+      }
+      #ad-container {
+        width: 640px;
+        max-width: 95vw;
+        aspect-ratio: 16/9;
+        background: #111;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ad-container"></div>
+    <video id="content" playsinline muted></video>
+    <script>
+      const adContainer = document.getElementById('ad-container');
+      const contentVideo = document.getElementById('content');
+      const adTagUrl = 'https://vast-tags.com/tag/15_etsy';
+
+      const adDisplayContainer = new google.ima.AdDisplayContainer(adContainer, contentVideo);
+      const adsLoader = new google.ima.AdsLoader(adDisplayContainer);
+
+      adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
+        const adsManager = e.getAdsManager(contentVideo);
+        adsManager.init(adContainer.clientWidth, adContainer.clientHeight, google.ima.ViewMode.NORMAL);
+        adsManager.setVolume(0); // ensure muted
+        adsManager.start();
+      });
+
+      adsLoader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
+        console.error(e.getError());
+      });
+
+      // Initialize and request ads automatically
+      adDisplayContainer.initialize();
+      const req = new google.ima.AdsRequest();
+      req.adTagUrl = adTagUrl;
+      req.linearAdSlotWidth = adContainer.clientWidth;
+      req.linearAdSlotHeight = adContainer.clientHeight;
+      adsLoader.requestAds(req);
+    </script>
+  </body>
+</html>
