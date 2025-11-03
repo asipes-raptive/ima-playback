@@ -7,7 +7,7 @@ const adTagUrls = [
   { adTagUrl: 'https://vast-tags.com/tag/15_squarespace', isVpaid: false },
   { adTagUrl: 'https://vast-tags.com/tag/15_hulu', isVpaid: true },
   { adTagUrl: 'https://vast-tags.com/tag/15_honda', isVpaid: true },
-  { adTagUrl: 'https://vast-tags.com/tag/15_vital_protein', isVpaid: true },
+  { adTagUrl: 'https://vast-tags.com/tag/15_west_elm', isVpaid: true },
 ];
 
 function logAd(adUrl, isVpaid) {
@@ -186,7 +186,7 @@ adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOA
     const currentAd = adTagUrls[currentAdIndex];
     let errorCode = 'Unknown';
     let errorMessage = 'No error message available';
-    
+
     // Try multiple ways to get error information from the event
     if (e.getError) {
       const error = e.getError();
@@ -196,14 +196,14 @@ adsLoader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOA
       }
     } else if (e.error) {
       const error = e.error;
-      errorCode = error.getErrorCode ? error.getErrorCode() : (error.code || error.codeNumber || errorCode);
-      errorMessage = error.getMessage ? error.getMessage() : (error.message || errorMessage);
+      errorCode = error.getErrorCode ? error.getErrorCode() : error.code || error.codeNumber || errorCode;
+      errorMessage = error.getMessage ? error.getMessage() : error.message || errorMessage;
     } else if (e.type === google.ima.AdEvent.Type.ERROR) {
       // Check if error info is directly on the event
       if (e.errorCode !== undefined) errorCode = e.errorCode;
       if (e.errorMessage !== undefined) errorMessage = e.errorMessage;
     }
-    
+
     logAdFailure(currentAd.adTagUrl, currentAd.isVpaid, errorCode, errorMessage);
     currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
     playNextAd();
@@ -217,7 +217,7 @@ adsLoader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
   const currentAd = adTagUrls[currentAdIndex];
   const errorCode = error.getErrorCode ? error.getErrorCode() : 'Unknown';
   const errorMessage = error.getMessage ? error.getMessage() : 'No error message available';
-  
+
   logAdFailure(currentAd.adTagUrl, currentAd.isVpaid, errorCode, errorMessage);
   console.error(error);
   currentAdIndex = (currentAdIndex + 1) % adTagUrls.length;
